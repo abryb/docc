@@ -2,7 +2,7 @@
 
 USAGE=$(cat <<USAGE
 Script locating closest docker-compose.yml (or yaml) file and executing it
-If there is 'docker-compose.sh' file in same directory, it will be executed instead of regular 'docker-compose'
+If there is 'docc.sh' file in same directory, it will be executed instead of regular 'docker-compose'
 Usage:
     $0 <docker-compose arguments>
 Options:
@@ -63,10 +63,10 @@ function find_in_subdirectory_and_exec() {
                     exit 0
                 ;;
                 * )
-                    # execute docker-compose.sh file if exists in same directory as docker-compose.yaml file
+                    # execute docc.sh wrapper file if exists in same directory as docker-compose.yaml file
                     cd $(dirname $file)
-                    if [[ -f "docker-compose.sh" ]]; then
-                        exec ./docker-compose.sh "$@"
+                    if [[ -f "docc.sh" ]]; then
+                        exec ./docc.sh "$@"
                     fi
                     exec docker-compose "$@"
                 ;;
