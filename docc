@@ -1,0 +1,85 @@
+#!/usr/bin/env bash
+
+USAGE=$(cat <<USAGE
+Script locating closest docker-compose.yml (or yaml) file and executing it
+If there is 'docker-compose.sh' file in same directory, it will be executed instead of regular 'docker-compose'
+Usage:
+    $0 <docker-compose arguments>
+Options:
+    ?, --help                 print help
+Special commands:
+    file                      prints relative path to found file
+                              $0 file # ./../foo/bar/docker-compose.yaml
+
+    file <command> [args..]   executes custom command on configuration file
+                              Examples:
+                              $0 file less
+                              $0 file realpath
+                              $0 file chmod 777
+
+    dir                       prints absolute path to found file directory
+                              $0 dir # /home/user/foo/bar
+
+    env                       prints found file linked .env file content
+USAGE
+)
+
+case $1 in
+    --help | ?)
+        echo "$USAGE"
+        exit 0
+    ;;
+esac
+
+init_directory=$(pwd)
+
+function find_in_subdirectory_and_exec() {
+    for i in 1 2 3 4; do
+        find_result="$(find -maxdepth $i -type f -regextype posix-extended -regex '.*/docker-compose\.ya?ml' 2>/dev/null)"
+        find_result_c=$(echo "$find_result" | wc -l)
+
+        if [[ "$find_result_c" -eq "1" ]] && [[ "$find_result" != "" ]]; then
+            file="$find_result"
+            file_dir=$(dirname "$find_result")
+            case $1 in
+                file )
+                    if [[ "$2" != "" ]]; then
+                        exec "$2" "$file" "${@:3}"
+                    fi
+                    exec realpath --relative-to="$init_directory" "$file" ;;
+                dir )
+                    exec realpath "$file_dir" ;;
+                env )
+                    if [[ -f "$file_dir/.env" ]]; then
+                        cat "$file_dir/.env"
+                    fi
+                    exit 0
+                ;;
+                * )
+                    # execute docker-compose.sh file if exists in same directory as docker-compose.yaml file
+                    cd $(dirname $file)
+                    if [[ -f "docker-compose.sh" ]]; then
+                        exec ./docker-compose.sh "$@"
+                    fi
+                    exec docker-compose "$@"
+                ;;
+            esac
+        fi
+
+        if [[ "$find_result_c" -gt "1" ]]; then
+            echo "Found more than 1 docker-compose file:"
+            echo "$find_result"
+            exit 1
+        fi
+    done
+    return 1
+}
+
+while ! find_in_subdirectory_and_exec "$@" ; do
+    if [ "$PWD" == '/' ]; then
+        echo "docker-compose configuration file not found" 1>&2
+        exit 1
+    fi
+    cd ./..
+done
+
