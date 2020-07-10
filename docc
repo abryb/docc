@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+# author Błażej Rybarkiewicz www.github.com/abryb
+
 USAGE=$(cat <<USAGE
 Script locating closest docker-compose.yml (or yaml) file and executing it
 If there is 'docc.sh' file in same directory, it will be executed instead of regular 'docker-compose'
@@ -19,6 +21,8 @@ Special commands:
 
     dir                       prints absolute path to found file directory
                               $0 dir # /home/user/foo/bar
+
+    script                    prints associated docc.sh content if exists
 
     env                       prints found file linked .env file content
 
@@ -56,6 +60,8 @@ function find_in_subdirectory_and_exec() {
                     exec realpath --relative-to="$init_directory" "$file" ;;
                 dir )
                     exec realpath "$file_dir" ;;
+                script )
+                    exec cat "$file_dir/docc.sh" ;;
                 env )
                     if [[ -f "$file_dir/.env" ]]; then
                         cat "$file_dir/.env"
@@ -66,6 +72,12 @@ function find_in_subdirectory_and_exec() {
                     # execute docc.sh wrapper file if exists in same directory as docker-compose.yaml file
                     cd $(dirname $file)
                     if [[ -f "docc.sh" ]]; then
+
+                        if [[ -f ".env" ]]; then
+                            set -a
+                            source ".env"
+                            set +a
+                        fi
                         exec ./docc.sh "$@"
                     fi
                     exec docker-compose "$@"

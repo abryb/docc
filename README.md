@@ -11,9 +11,28 @@ curl https://raw.githubusercontent.com/abryb/docc/master/docc -o /usr/local/bin/
 ```bash
 curl https://raw.githubusercontent.com/abryb/docc/master/docc -o /home/$USER/.local/bin
 ```
-rembember to add /home/$USER/.local/bin to $PATH variable 
+rembember to add /home/$USER/.local/bin to $PATH variable
 
 ### Usage
 ```shell
 docc --help
+```
+
+### docc.sh wrapper
+
+Example docc.sh wrapper
+
+```bash
+#!/usr/bin/env bash
+
+# Using variables from .env file
+
+case $1 in
+    open )
+        exec xdg-open http://${COMPOSE_PROJECT_NAME}.localhost ;;
+    shell )
+        exec docker-compose exec my-service /bin/ash ;;
+esac
+
+exec docker-compose "$@"
 ```
