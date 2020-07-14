@@ -12,20 +12,15 @@ Options:
 Special commands:
     file                      prints relative path to found file
                               $0 file # ./../foo/bar/docker-compose.yaml
-
     file <command> [args..]   executes custom command on configuration file
                               Examples:
                               $0 file less
                               $0 file realpath
                               $0 file chmod 777
-
     dir                       prints absolute path to found file directory
                               $0 dir # /home/user/foo/bar
-
     script                    prints associated docc.sh content if exists
-
     env                       prints found file linked .env file content
-
     self-update               update docc script from https://raw.githubusercontent.com/abryb/docc/master/docc
 USAGE
 )
@@ -44,61 +39,78 @@ esac
 
 init_directory=$(pwd)
 
-function find_in_subdirectory_and_exec() {
-    for i in 1 2 3 4; do
-        find_result="$(find -maxdepth $i -type f -regextype posix-extended -regex '.*/docker-compose\.ya?ml' 2>/dev/null)"
-        find_result_c=$(echo "$find_result" | wc -l)
+find_patterns=(
+".                -maxdepth 1" # in current
+".                -maxdepth 2" # in child
+"./..             -maxdepth 1" # in parent
+"./..             -maxdepth 2" # in parent child
+"./../..          -maxdepth 1" # in parent parent
+".                -maxdepth 3" # in child child
+"./../../..       -maxdepth 1" # in parent parent parent
+"./../..          -maxdepth 2" # in parent parent child
+"./../../../..    -maxdepth 1" # in parent parent parent parent
+"./../../..       -maxdepth 2" # in parent parent parent child
+"./../../../../.. -maxdepth 1" # in parent parent parent parent parent
+)
 
-        if [[ "$find_result_c" -eq "1" ]] && [[ "$find_result" != "" ]]; then
-            file="$find_result"
-            file_dir=$(dirname "$find_result")
-            case $1 in
-                file )
-                    if [[ "$2" != "" ]]; then
-                        exec "$2" "$file" "${@:3}"
-                    fi
-                    exec realpath --relative-to="$init_directory" "$file" ;;
-                dir )
-                    exec realpath "$file_dir" ;;
-                script )
-                    exec cat "$file_dir/docc.sh" ;;
-                env )
-                    if [[ -f "$file_dir/.env" ]]; then
-                        cat "$file_dir/.env"
-                    fi
-                    exit 0
-                ;;
-                * )
-                    # execute docc.sh wrapper file if exists in same directory as docker-compose.yaml file
-                    cd $(dirname $file)
-                    if [[ -f "docc.sh" ]]; then
+# path to configuration file
+file=""
+function find_in_pattern() {
+    find_result="$(find $1 -type f -regextype posix-extended -regex '.*/docker-compose\.ya?ml' 2>/dev/null)"
+    find_result_c=$(echo "$find_result" | wc -l)
 
-                        if [[ -f ".env" ]]; then
-                            set -a
-                            source ".env"
-                            set +a
-                        fi
-                        exec ./docc.sh "$@"
-                    fi
-                    exec docker-compose "$@"
-                ;;
-            esac
-        fi
+    if [[ "$find_result_c" -eq "1" ]] && [[ "$find_result" != "" ]]; then
+        file="$find_result"
+        return 0
+    fi
 
-        if [[ "$find_result_c" -gt "1" ]]; then
-            echo "Found more than 1 docker-compose file:"
-            echo "$find_result"
-            exit 1
-        fi
-    done
+    if [[ "$find_result_c" -gt "1" ]]; then
+        echo "Found more than 1 docker-compose file:"
+        echo "$find_result"
+        exit 1
+    fi
     return 1
 }
 
-while ! find_in_subdirectory_and_exec "$@" ; do
-    if [ "$PWD" == '/' ]; then
-        echo "docker-compose configuration file not found" 1>&2
-        exit 1
+
+for pattern in "${find_patterns[@]}"; do
+    if find_in_pattern "$pattern" ; then
+        file="$file"
+        file_dir=$(dirname "$file")
+        case $1 in
+            file )
+                if [[ "$2" != "" ]]; then
+                    exec "$2" "$file" "${@:3}"
+                fi
+                exec realpath --relative-to="$init_directory" "$file" ;;
+            dir )
+                exec realpath "$file_dir" ;;
+            script )
+                exec cat "$file_dir/docc.sh" ;;
+            env )
+                if [[ -f "$file_dir/.env" ]]; then
+                    cat "$file_dir/.env"
+                fi
+                exit 0
+            ;;
+            * )
+                # execute docc.sh wrapper file if exists in same directory as docker-compose.yaml file
+                cd $(dirname $file)
+                if [[ -f "docc.sh" ]]; then
+
+                    if [[ -f ".env" ]]; then
+                        set -a
+                        source ".env"
+                        set +a
+                    fi
+                    exec ./docc.sh "$@"
+                fi
+                exec docker-compose "$@"
+            ;;
+        esac
+        break;
     fi
-    cd ./..
 done
 
+echo "docker-compose configuration file not found" 1>&2
+exit 1
